@@ -13,7 +13,7 @@ export const AppContextProvider = ({ children }) => {
     const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
 
     const fetchUser = useCallback(async () => {
-        setUser()
+        setUser(dummyUserData)
     }, [])
 
     const fetchUsersChats = useCallback(async () => {

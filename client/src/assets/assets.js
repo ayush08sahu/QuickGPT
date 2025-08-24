@@ -58,21 +58,21 @@ export const dummyPlans = [
     {
         _id: "basic",
         name: "Basic",
-        price: 50,
+        price: 10,
         credits: 100,
         features: ['100 text generations', '50 image generations', 'Standard support', 'Access to basic models']
     },
     {
         _id: "pro",
         name: "Pro",
-        price: 250,
+        price: 20,
         credits: 500,
         features: ['500 text generations', '200 image generations', 'Priority support', 'Access to pro models', 'Faster response time']
     },
     {
         _id: "premium",
         name: "Premium",
-        price: 500,
+        price: 50,
         credits: 1000,
         features: ['1000 text generations', '500 image generations', '24/7 VIP support', 'Access to premium models', 'Dedicated account manager']
     }

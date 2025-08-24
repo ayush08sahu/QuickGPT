@@ -40,7 +40,7 @@ const Credits = () => {
                 {plan.name}
               </h3>
               <p className="text-2xl fontt-bold text-purple-600 dark:text-white mb-4">
-                ₹ {plan.price}
+                $ {plan.price}
                 <span className="text-base font-normal text-gray-600 dark:text-purple-200">
                   {""}/ {plan.credits} Credits
                 </span>

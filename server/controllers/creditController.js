@@ -5,7 +5,7 @@ const plans = [
   {
     _id: "basic",
     name: "Basic",
-    price: 50,
+    price: 10,
     credits: 100,
     features: [
       "100 text generations",
@@ -17,7 +17,7 @@ const plans = [
   {
     _id: "pro",
     name: "Pro",
-    price: 250,
+    price: 20,
     credits: 500,
     features: [
       "500 text generations",
@@ -30,7 +30,7 @@ const plans = [
   {
     _id: "premium",
     name: "Premium",
-    price: 500,
+    price: 50,
     credits: 1000,
     features: [
       "1000 text generations",
