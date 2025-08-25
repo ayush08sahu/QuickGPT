@@ -113,8 +113,9 @@ export const AppContextProvider = ({ children }) => {
     if (user) {
       // Force select the most recent chat when user first loads the app
       fetchUsersChats(true);
-      // Automatically navigate to chat page when user logs in
-      if (window.location.pathname !== '/') {
+      // Only navigate to chat page on initial load, not on every user state change
+      if (window.location.pathname === '/') {
+        // User is on root, ensure they see the chat
         navigate('/');
       }
     } else {
@@ -139,6 +140,14 @@ export const AppContextProvider = ({ children }) => {
       setSelectedChat(chats[0]);
     }
   }, [user, chats, selectedChat]);
+
+  // Handle initial app load and navigation
+  useEffect(() => {
+    if (user && window.location.pathname === '/') {
+      // Only navigate to chat page if user is on root and no specific route is requested
+      navigate('/');
+    }
+  }, [user, navigate]);
 
   // Function to update a specific chat
   const updateChat = useCallback((chatId, updatedChat) => {
