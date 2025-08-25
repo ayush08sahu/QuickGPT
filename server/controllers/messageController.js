@@ -59,31 +59,83 @@ export const imageMessageController = async (req, res) => {
         // Push user message
         chat.messages.push({role: "user", content: prompt, timestamp: Date.now(), isImage: false})
 
-        // Encode the prompt
-        const encodedPrompt = encodeURIComponent(prompt)
+        // Check if ImageKit environment variables are configured
+        if (!process.env.IMAGEKIT_PUBLIC_KEY || !process.env.IMAGEKIT_PRIVATE_KEY || !process.env.IMAGEKIT_URL_ENDPOINT) {
+            return res.json({ 
+                success: false, 
+                message: "Image generation service is not properly configured. Please contact support." 
+            });
+        }
 
-        // Construct imagekit AI generation URL
-        const generatedImageUrl = `${process.env.IMAGEKIT_URL_ENDPOINT}/ik-genimg-prompt-${encodedPrompt}/quickgpt/${Date.now()}.png?tr=w-800,h-800`;
-
-        // Trigger generation by fetching from Imagekit
-        const aiImageResponse = await axios.get(generatedImageUrl, {responseType: 'arraybuffer'});
+        // Use ImageKit AI generation API properly
+        let aiImageResponse;
+        try {
+            // Try using ImageKit AI API first
+            const generationResponse = await imagekit.createAIImage({
+                prompt: prompt,
+                width: 800,
+                height: 800,
+                aspectRatio: "1:1"
+            });
+            
+            // Get the generated image URL
+            const generatedImageUrl = generationResponse.url;
+            
+            // Download the generated image
+            aiImageResponse = await axios.get(generatedImageUrl, {responseType: 'arraybuffer'});
+            
+        } catch (imageError) {
+            console.error('ImageKit AI Generation Error:', imageError.response?.status, imageError.response?.data);
+            
+            // Fallback to URL-based generation if AI API fails
+            try {
+                const encodedPrompt = encodeURIComponent(prompt);
+                const fallbackUrl = `${process.env.IMAGEKIT_URL_ENDPOINT}/ik-genimg-prompt-${encodedPrompt}/quickgpt/${Date.now()}.png?tr=w-800,h-800`;
+                
+                aiImageResponse = await axios.get(fallbackUrl, {responseType: 'arraybuffer'});
+            } catch (fallbackError) {
+                console.error('Fallback generation also failed:', fallbackError.response?.status);
+                
+                if (imageError.response?.status === 403 || fallbackError.response?.status === 403) {
+                    return res.json({ 
+                        success: false, 
+                        message: "Image generation service is currently unavailable. Please check your ImageKit AI credits and try again." 
+                    });
+                }
+                
+                return res.json({ 
+                    success: false, 
+                    message: "Failed to generate image. Please try again." 
+                });
+            }
+        }
 
         // convert to base64
         const base64Image = `data:image/png;base64,${Buffer.from(aiImageResponse.data, "binary").toString("base64")}`;
 
-        // Upload to imageki media Library
-        const uploadResponse = await imagekit.upload({
-            file: base64Image,
-            fileName: `${Date.now()}.png`,
-            folder: "quickgpt"
-        })
+        let uploadResponse;
+        try {
+            // Upload to imagekit media Library
+            uploadResponse = await imagekit.upload({
+                file: base64Image,
+                fileName: `${Date.now()}.png`,
+                folder: "quickgpt"
+            });
+        } catch (uploadError) {
+            console.error('ImageKit Upload Error:', uploadError);
+            return res.json({ 
+                success: false, 
+                message: "Failed to save generated image. Please try again." 
+            });
+        }
 
         const reply = {
             role: "assistant",
             content: uploadResponse.url,
             timestamp: Date.now(),
             isImage: true,
-            isPublished
+            isPublished,
+            imageUrl: `data:image/png;base64,${Buffer.from(aiImageResponse.data, "binary").toString("base64")}`
         }
         res.json({ success: true, message: "Message sent successfully", reply })
         chat.messages.push(reply)
@@ -93,6 +145,7 @@ export const imageMessageController = async (req, res) => {
 
 
     } catch (error) {
+        console.error('Image generation error:', error);
         res.json({ success: false, message: error.message })
     }
 }

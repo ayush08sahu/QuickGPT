@@ -1,17 +1,80 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAppContext } from "../context/AppContext";
 import { assets } from "../assets/assets";
 import moment from "moment";
+import toast from "react-hot-toast";
 
 const Sidebar = ({ isMenuOpen, setIsMenuOpen }) => {
-  const { chats, setSelectedChat, theme, setTheme, user, navigate } =
-    useAppContext();
+  const {
+    chats,
+    setSelectedChat,
+    selectedChat,
+    theme,
+    setTheme,
+    user,
+    navigate,
+    createNewChat,
+    axios,
+    token,
+    setChats,
+    fetchUsersChats,
+    setToken,
+  } = useAppContext();
   const [search, setSearch] = useState("");
+
+  const logout = ()=>{
+    localStorage.removeItem('token')
+    setToken(null)
+    toast.success('Logged out successfully')
+  }
+
+  const deleteChat = async (e, chatId) => {
+    try {
+      e.stopPropagation()
+      const confirm = window.confirm('Are you sure you want to delete this chat?')
+      if(!confirm) return
+      const {data} = await axios.post('/api/chat/delete', {chatId}, {headers: { Authorization : token }})
+      if(data.success){
+        setChats(prev => prev.filter(chat => chat._id !== chatId))
+        await fetchUsersChats()
+        toast.success(data.message)
+      }
+    } catch (error) {
+      toast.error(error.message)
+    }
+  }
+
+  const sidebarRef = useRef(null);
+
+  // Handle sidebar open/close effects
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (window.innerWidth <= 768 && isMenuOpen && sidebarRef.current && !sidebarRef.current.contains(event.target)) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    // Prevent body scroll when sidebar is open on mobile
+    if (isMenuOpen && window.innerWidth <= 768) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    
+    // Cleanup
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.body.style.overflow = 'auto';
+    };
+  }, [isMenuOpen]);
 
   return (
     <div
-      className={`flex flex-col h-screen min-w-72 p-5 dark:bg-gradient-to-b from-[#242124] to-[#000000]/30 border-r border-[#80609f]/30 backdrop-blur-3xl transition-all duration-500 max-md:absolute left-0 z-1 ${
-        !isMenuOpen && "max-md:-translate-x-full"
+      ref={sidebarRef}
+      className={`flex flex-col h-screen min-w-72 p-5 dark:bg-gradient-to-b from-[#242124] to-[#000000]/30 border-r border-[#80609f]/30 backdrop-blur-3xl transition-all duration-500 max-md:absolute left-0 z-10 ${
+        !isMenuOpen ? "max-md:-translate-x-full" : "max-md:translate-x-0"
       }`}
     >
       {/* logo */}
@@ -29,7 +92,7 @@ const Sidebar = ({ isMenuOpen, setIsMenuOpen }) => {
       </div>
 
       {/* new chat */}
-      <button className="flex justify-center items-center w-full py-2 mt-10 text-white bg-gradient-to-r from-[#A456F7] to-[#3D81F6] text-sm rounded-md cursor-pointer ">
+      <button onClick={createNewChat} className="flex justify-center items-center w-full py-2 mt-10 text-white bg-gradient-to-r from-[#A456F7] to-[#3D81F6] text-sm rounded-md cursor-pointer ">
         <span className="mr-2 text-xl">+</span>New Chat
       </button>
       <div className="flex items-center gap-2 p-3 mt-4 border border-gray-400 dark:border-white/20 rounded-md">
@@ -50,6 +113,8 @@ const Sidebar = ({ isMenuOpen, setIsMenuOpen }) => {
       {chats.length > 0 && <p className="mt-4 text-sm">Recent Chats</p>}
       <div className="flex-1 overflow-y-scroll mt-3 text-sm space-y-3">
         {chats
+          .slice() // copy array
+          .reverse() // most recent first
           .filter((chat) =>
             chat.messages[0]
               ? chat.messages[0]?.content
@@ -59,13 +124,18 @@ const Sidebar = ({ isMenuOpen, setIsMenuOpen }) => {
           )
           .map((chat) => (
             <div
-              onClick={() => {
-                navigate("/");
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 setSelectedChat(chat);
                 setIsMenuOpen(false);
+                // Only navigate if we're not already on the chat page
+                if (window.location.pathname !== '/') {
+                  navigate("/");
+                }
               }}
               key={chat._id}
-              className="p-2 px-2 dark:bg-[#57317C]/10 border border-gray-300 dark:border-[#80609F]/15 rounded-md cursor-pointer hover:bg-[#57317C]/10 flex justify-between group dark:hover:bg-[#57317C]/30"
+              className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer ${selectedChat?._id === chat._id ? 'bg-gray-700' : 'hover:bg-gray-700'}`}
             >
               <div>
                 <p>
@@ -80,6 +150,7 @@ const Sidebar = ({ isMenuOpen, setIsMenuOpen }) => {
               <img
                 src={assets.bin_icon}
                 className="hidden group-hover:block w-4 cursor-pointer not-dark:invert"
+                onClick={e=> toast.promise(deleteChat(e, chat._id), {loading: 'deleting...'})}
                 alt=""
               />
             </div>
@@ -152,6 +223,7 @@ const Sidebar = ({ isMenuOpen, setIsMenuOpen }) => {
           <img
             src={assets.logout_icon}
             className="h-5 cursor-pointer hidden not-dark:invert group-hover:block"
+            onClick={logout}
           />
         )}
       </div>

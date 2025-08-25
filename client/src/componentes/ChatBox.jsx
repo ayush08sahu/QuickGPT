@@ -3,12 +3,13 @@ import { useAppContext } from "../context/AppContext";
 import Loading from "./../pages/Loading";
 import { assets } from "../assets/assets";
 import Message from "./Message";
+import toast from "react-hot-toast";
 
 const ChatBox = () => {
 
   const containerRef = useRef(null);
 
-  const { selectedChat, theme } = useAppContext();
+  const { selectedChat, theme, user, axios, token, setUser, setSelectedChat, setChats, updateChat, setIsChatting } = useAppContext();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -17,22 +18,147 @@ const ChatBox = () => {
   const [isPublished, setIsPublished] = useState(false);
 
   const onSubmit = async (e) => {
+    // Prevent any default form behavior
     e.preventDefault();
+    e.stopPropagation();
+    
+    if (!user) return toast('Login to send message');
+    if (!prompt.trim()) return toast('Please enter a message');
+    if (!selectedChat?._id) return toast('No chat selected');
+    
+    const promptCopy = prompt.trim();
+    setPrompt('');
+    setLoading(true);
+    setIsChatting(true);
+    
+    // Store current chat ID to prevent race conditions
+    const currentChatId = selectedChat._id;
+    
+    // Create user message with unique timestamp
+    const userMessage = {
+      role: 'user',
+      content: promptCopy,
+      timestamp: Date.now(),
+      isImage: false
+    };
+
+    // Optimistically update UI with proper key
+    setMessages(prev => [...prev, userMessage]);
+    
+    try {
+      // Make the API call
+      const { data } = await axios.post(
+        `/api/message/${mode}`,
+        {
+          chatId: currentChatId,
+          prompt: promptCopy,
+          isPublished
+        },
+        { headers: { Authorization: token } }
+      );
+
+      if (data.success) {
+        // Create AI message
+        const aiMessage = {
+          role: 'assistant',
+          content: data.reply?.content || data.replay?.content || data.reply || data.replay || 'No response',
+          timestamp: Date.now(),
+          isImage: mode === 'image',
+          ...(mode === 'image' && {
+            imageUrl: data.reply?.imageUrl || data.replay?.imageUrl || data.imageUrl
+          })
+        };
+
+        // Update state with both messages
+        const finalMessages = [...messages, userMessage, aiMessage];
+        
+        // Update local state
+        setMessages(finalMessages);
+        
+        // Update the chat with new messages and move it to the top
+        const updatedChat = {
+          messages: finalMessages,
+          updatedAt: new Date().toISOString()
+        };
+        
+        // Use the updateChat function to update both selected chat and chats list
+        updateChat(currentChatId, updatedChat);
+        
+        // Move the updated chat to the top of the list
+        setChats(prevChats => {
+          const filteredChats = prevChats.filter(chat => chat._id !== currentChatId);
+          const updatedChatData = {
+            ...selectedChat,
+            ...updatedChat
+          };
+          return [updatedChatData, ...filteredChats];
+        });
+
+        // Update credits (only once)
+        const creditDeduction = mode === 'image' ? 2 : 1;
+        setUser(prev => ({
+          ...prev,
+          credits: Math.max(0, (prev.credits || 0) - creditDeduction)
+        }));
+      }else{
+        console.error('API Error:', data.message);
+        toast.error(data.message)
+        setPrompt(promptCopy)
+        // Remove the user message if API call failed
+        setMessages(prev => prev.slice(0, -1))
+      }
+    } catch (error) {
+      console.error('Request failed:', error);
+      toast.error(error.response?.data?.message || error.message)
+      setPrompt(promptCopy)
+      // Remove the user message if API call failed
+      setMessages(prev => prev.slice(0, -1))
+    }finally{
+      setLoading(false)
+      // Add a small delay to prevent race conditions with chat fetching
+      setTimeout(() => {
+        setIsChatting(false)
+      }, 100)
+    }
   };
 
+  // Handle Enter key submission without page reload
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      onSubmit(e);
+    }
+  };
+
+  // Update messages when selected chat changes
   useEffect(() => {
     if (selectedChat) {
-      setMessages(selectedChat.messages);
+      const currentChatId = selectedChat?._id;
+      setMessages(prev => {
+        // Only update if the chat ID is different to prevent unnecessary re-renders
+        if (prev.length === 0 || prev[0]?.chatId !== currentChatId) {
+          return selectedChat.messages || [];
+        }
+        return prev;
+      });
+    } else {
+      setMessages([]);
     }
-  }, [selectedChat]);
+  }, [selectedChat?._id]);
+  
+  // Optimized scroll effect with debouncing
   useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollTo({
-        top: containerRef.current.scrollHeight,
-        behavior: "smooth",
-      })
-    }
-  }, [messages]);
+    const timeoutId = setTimeout(() => {
+      if (containerRef.current) {
+        containerRef.current.scrollTo({
+          top: containerRef.current.scrollHeight,
+          behavior: "smooth",
+        });
+      }
+    }, 50); // Small delay to batch scroll operations
+
+    return () => clearTimeout(timeoutId);
+  }, [messages.length]); // Only depend on messages length, not the entire messages array
 
   return (
     <div className="flex-1 flex flex-col justify-between m-5 md:m-10 xl:mx-30 max-md:mt-14 2xl:pr-40">
@@ -50,7 +176,7 @@ const ChatBox = () => {
           </div>
         )}
         {messages.map((message, index) => (
-          <Message key={index} message={message} />
+          <Message key={`${message.timestamp}-${index}`} message={message} />
         ))}
         {/* 3 dot loading */}
         {loading && (
@@ -98,8 +224,13 @@ const ChatBox = () => {
           required
           onChange={(e) => setPrompt(e.target.value)}
           value={prompt}
+          onKeyPress={handleKeyPress}
         />
-        <button disabled={loading}>
+        <button 
+          type="submit"
+          disabled={loading}
+          onClick={onSubmit}
+        >
           <img
             src={loading ? assets.stop_icon : assets.send_icon}
             alt=""
