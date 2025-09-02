@@ -1,4 +1,10 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -36,57 +42,62 @@ export const AppContextProvider = ({ children }) => {
   }, [token]);
 
   // Fetch user chats
-  const fetchUsersChats = useCallback(async (forceSelectRecent = false) => {
-    try {
-      const { data } = await axios.get("/api/chat/get", {
-        headers: { Authorization: token },
-      });
-      if (data.success) {
-        setChats(data.chats);
+  const fetchUsersChats = useCallback(
+    async (forceSelectRecent = false) => {
+      try {
+        const { data } = await axios.get("/api/chat/get", {
+          headers: { Authorization: token },
+        });
+        if (data.success) {
+          setChats(data.chats);
 
-        if (data.chats.length === 0) {
-          // Create a new chat, but avoid infinite recursion
-          await createNewChat();
-          return;
-        }
-
-        // Select the most recent chat if forced or if no chat is selected
-        if (forceSelectRecent || !selectedChat) {
-          setSelectedChat(data.chats[0]);
-        } else if (!isChatting) {
-          // Update the selected chat with fresh data if it exists in the fetched chats
-          const updatedSelectedChat = data.chats.find(chat => chat._id === selectedChat._id);
-          if (updatedSelectedChat) {
-            setSelectedChat(updatedSelectedChat);
-          } else {
-            // If the current selected chat doesn't exist anymore, select the most recent
-            setSelectedChat(data.chats[0]);
+          if (data.chats.length === 0) {
+            // Create a new chat, but avoid infinite recursion
+            await createNewChat();
+            return;
           }
+
+          // Select the most recent chat if forced or if no chat is selected
+          if (forceSelectRecent || !selectedChat) {
+            setSelectedChat(data.chats[0]);
+          } else if (!isChatting) {
+            // Update the selected chat with fresh data if it exists in the fetched chats
+            const updatedSelectedChat = data.chats.find(
+              (chat) => chat._id === selectedChat._id
+            );
+            if (updatedSelectedChat) {
+              setSelectedChat(updatedSelectedChat);
+            } else {
+              // If the current selected chat doesn't exist anymore, select the most recent
+              setSelectedChat(data.chats[0]);
+            }
+          }
+        } else {
+          toast.error(data.message);
         }
-      } else {
-        toast.error(data.message);
+      } catch (error) {
+        toast.error(error.message);
       }
-    } catch (error) {
-      toast.error(error.message);
-    }
-  }, [token, selectedChat, isChatting]);
+    },
+    [token, selectedChat, isChatting]
+  );
 
   // Create new chat
   const createNewChat = useCallback(async () => {
     try {
       if (!user) return toast("Login to create a new chat");
-      
+
       // Only navigate if we're not already on the chat page
-      if (window.location.pathname !== '/') {
+      if (window.location.pathname !== "/") {
         navigate("/");
       }
-      
+
       const { data } = await axios.get("/api/chat/create", {
         headers: { Authorization: token },
       });
       if (data.success && data.chat) {
         // Update chats state with the new chat
-        setChats(prevChats => [data.chat, ...prevChats]);
+        setChats((prevChats) => [data.chat, ...prevChats]);
         // Set the newly created chat as selected
         setSelectedChat(data.chat);
       } else {
@@ -114,9 +125,9 @@ export const AppContextProvider = ({ children }) => {
       // Force select the most recent chat when user first loads the app
       fetchUsersChats(true);
       // Only navigate to chat page on initial load, not on every user state change
-      if (window.location.pathname === '/') {
+      if (window.location.pathname === "/") {
         // User is on root, ensure they see the chat
-        navigate('/');
+        navigate("/");
       }
     } else {
       setChats([]);
@@ -143,22 +154,22 @@ export const AppContextProvider = ({ children }) => {
 
   // Handle initial app load and navigation
   useEffect(() => {
-    if (user && window.location.pathname === '/') {
+    if (user && window.location.pathname === "/") {
       // Only navigate to chat page if user is on root and no specific route is requested
-      navigate('/');
+      navigate("/");
     }
   }, [user, navigate]);
 
   // Function to update a specific chat
   const updateChat = useCallback((chatId, updatedChat) => {
-    setChats(prevChats => 
-      prevChats.map(chat => 
+    setChats((prevChats) =>
+      prevChats.map((chat) =>
         chat._id === chatId ? { ...chat, ...updatedChat } : chat
       )
     );
-    
+
     // Also update selected chat if it's the same chat
-    setSelectedChat(prev => 
+    setSelectedChat((prev) =>
       prev?._id === chatId ? { ...prev, ...updatedChat } : prev
     );
   }, []);
